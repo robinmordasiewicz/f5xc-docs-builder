@@ -4,6 +4,11 @@ set -e
 CONTENT_DIR="${CONTENT_DIR:-/content/docs}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 
+# Clone theme if not mounted/present
+if [ ! -d "/app/theme" ]; then
+  git clone --depth 1 https://github.com/robinmordasiewicz/f5xc-docs-theme.git /app/theme
+fi
+
 # Inject content
 if [ -d "$CONTENT_DIR" ]; then
   cp -r "$CONTENT_DIR"/* /app/src/content/docs/

@@ -17,14 +17,14 @@ export default defineConfig({
     starlight({
       title,
       customCss: [
-        './src/fonts/font-face.css',
-        './src/styles/custom.css',
+        './theme/fonts/font-face.css',
+        './theme/styles/custom.css',
       ],
       logo: {
-        src: './src/assets/f5-logo.svg',
+        src: './theme/assets/f5-logo.svg',
       },
       components: {
-        Footer: './src/components/Footer.astro',
+        Footer: './theme/components/Footer.astro',
       },
       social: [
         {

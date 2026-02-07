@@ -20,8 +20,14 @@ jobs:
       - name: Checkout builder
         uses: actions/checkout@v5
         with:
-          repository: robinmordasiewicz/docs-builder
+          repository: robinmordasiewicz/f5xc-docs-builder
           path: builder
+
+      - name: Checkout theme
+        uses: actions/checkout@v5
+        with:
+          repository: robinmordasiewicz/f5xc-docs-theme
+          path: builder/theme
 
       - name: Setup Node
         uses: actions/setup-node@v6

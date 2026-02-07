@@ -205,13 +205,13 @@ Two options for local preview:
 docker run --rm \
   -v $(pwd)/docs:/content/docs \
   -v $(pwd)/output:/output \
-  ghcr.io/robinmordasiewicz/docs-builder:latest
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest
 ```
 
 ### Option 2: Manual builder checkout
 
 ```bash
-git clone https://github.com/robinmordasiewicz/docs-builder.git /tmp/builder
+git clone https://github.com/robinmordasiewicz/f5xc-docs-builder.git /tmp/builder
 cd /tmp/builder
 npm ci
 rm -rf src/content/docs/*
