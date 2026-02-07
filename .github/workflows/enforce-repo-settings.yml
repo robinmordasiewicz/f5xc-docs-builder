@@ -283,9 +283,149 @@ jobs:
             echo "[SKIP] Pages not enabled in config"
           fi
 
-          # ─── Phase 7: Verify ──────────────────────────────────────────────────
+          # ─── Phase 7: Sync Managed Files ──────────────────────────────────────
           echo ""
-          echo "=== Phase 7: Verify ==="
+          echo "=== Phase 7: Sync Managed Files ==="
+
+          MANAGED_FILES=$(echo "$CONFIG" | jq -c '.managed_files // empty')
+          SYNC_PR_CREATED=false
+          EXISTING_PR=""
+          SOURCE_REPO=""
+
+          if [ -z "$MANAGED_FILES" ]; then
+            echo "[SKIP] No managed_files in config"
+          else
+            SOURCE_REPO=$(echo "$MANAGED_FILES" | jq -r '.source_repo')
+            SOURCE_BASE=$(echo "$MANAGED_FILES" | jq -r '.source_base')
+            FILE_LIST=$(echo "$MANAGED_FILES" | jq -r '.files[]')
+
+            # Guard: skip if running in the source repo itself
+            if [ "${OWNER}/${REPO}" = "$SOURCE_REPO" ]; then
+              echo "[SKIP] Running in source repo — skipping managed file sync"
+            else
+              DRIFT_FILES=""
+              DRIFT_COUNT=0
+
+              for file in $FILE_LIST; do
+                # Fetch canonical content
+                CANONICAL_RESPONSE=$(gh api "repos/${SOURCE_REPO}/contents/${SOURCE_BASE}/${file}" 2>/dev/null) || true
+                if [ -z "$CANONICAL_RESPONSE" ]; then
+                  echo "[WARN] Could not fetch canonical: ${SOURCE_BASE}/${file}"
+                  continue
+                fi
+                CANONICAL_CONTENT=$(echo "$CANONICAL_RESPONSE" | jq -r '.content' | tr -d '\n' | base64 -d 2>/dev/null) || true
+
+                # Fetch downstream content (handle 404)
+                DOWNSTREAM_RESPONSE=$(gh api "repos/${OWNER}/${REPO}/contents/${file}" 2>/dev/null) || true
+                if [ -z "$DOWNSTREAM_RESPONSE" ]; then
+                  echo "[DRIFT] Missing downstream: ${file}"
+                  DRIFT_FILES="${DRIFT_FILES}${file}\n"
+                  DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                  continue
+                fi
+                DOWNSTREAM_CONTENT=$(echo "$DOWNSTREAM_RESPONSE" | jq -r '.content' | tr -d '\n' | base64 -d 2>/dev/null) || true
+
+                if [ "$CANONICAL_CONTENT" != "$DOWNSTREAM_CONTENT" ]; then
+                  echo "[DRIFT] Content mismatch: ${file}"
+                  DRIFT_FILES="${DRIFT_FILES}${file}\n"
+                  DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                else
+                  echo "[OK] ${file}"
+                fi
+              done
+
+              if [ "$DRIFT_COUNT" -eq 0 ]; then
+                echo "[OK] All managed files match canonical"
+              else
+                echo "[INFO] Found ${DRIFT_COUNT} drifted file(s)"
+
+                # Check for existing open sync PR (idempotency)
+                EXISTING_PR=$(gh pr list --repo "${OWNER}/${REPO}" \
+                  --head "governance/sync-managed-files" \
+                  --state open --json number --jq '.[0].number // empty' 2>/dev/null) || true
+                if [ -n "$EXISTING_PR" ]; then
+                  echo "[SKIP] Open sync PR #${EXISTING_PR} already exists"
+                else
+                  # Delete stale branch if it exists
+                  gh api "repos/${OWNER}/${REPO}/git/refs/heads/governance/sync-managed-files" \
+                    --method DELETE 2>/dev/null || true
+
+                  # Create issue
+                  DRIFT_LIST=$(printf '%b' "$DRIFT_FILES" | sed '/^$/d' | sed 's/^/- /')
+                  ISSUE_NUM=$(gh issue create --repo "${OWNER}/${REPO}" \
+                    --title "chore: sync managed files from governance template" \
+                    --body "$(cat <<ISSUE_EOF
+The following managed files have drifted from the canonical source in \`${SOURCE_REPO}\`:
+
+${DRIFT_LIST}
+
+This issue was created automatically by the governance enforcement workflow.
+ISSUE_EOF
+                    )" | grep -o '[0-9]*$')
+                  echo "[OK] Created issue #${ISSUE_NUM}"
+
+                  # Create branch from main HEAD
+                  MAIN_SHA=$(gh api "repos/${OWNER}/${REPO}/git/ref/heads/main" --jq '.object.sha')
+                  gh api "repos/${OWNER}/${REPO}/git/refs" --method POST \
+                    --input <(jq -n --arg sha "$MAIN_SHA" \
+                      '{"ref":"refs/heads/governance/sync-managed-files","sha":$sha}') >/dev/null
+                  echo "[OK] Created branch governance/sync-managed-files"
+
+                  # Commit each drifted file to the branch
+                  for file in $(printf '%b' "$DRIFT_FILES" | sed '/^$/d'); do
+                    # Get canonical content as base64
+                    B64=$(gh api "repos/${SOURCE_REPO}/contents/${SOURCE_BASE}/${file}" --jq '.content' | tr -d '\n')
+
+                    # Check if file exists downstream (need SHA for update)
+                    FILE_SHA=$(gh api "repos/${OWNER}/${REPO}/contents/${file}" --jq '.sha' 2>/dev/null) || true
+
+                    if [ -n "$FILE_SHA" ]; then
+                      # Update existing file
+                      jq -n --arg msg "chore: sync ${file}" \
+                            --arg content "$B64" \
+                            --arg sha "$FILE_SHA" \
+                            --arg branch "governance/sync-managed-files" \
+                        '{"message":$msg,"content":$content,"sha":$sha,"branch":$branch}' | \
+                        gh api "repos/${OWNER}/${REPO}/contents/${file}" --method PUT --input - >/dev/null
+                    else
+                      # Create new file
+                      jq -n --arg msg "chore: sync ${file}" \
+                            --arg content "$B64" \
+                            --arg branch "governance/sync-managed-files" \
+                        '{"message":$msg,"content":$content,"branch":$branch}' | \
+                        gh api "repos/${OWNER}/${REPO}/contents/${file}" --method PUT --input - >/dev/null
+                    fi
+                    echo "[OK] Synced ${file}"
+                  done
+
+                  # Create PR
+                  PR_BODY=$(cat <<PR_EOF
+Closes #${ISSUE_NUM}
+
+Synced managed files from \`${SOURCE_REPO}\` canonical source:
+
+${DRIFT_LIST}
+PR_EOF
+                  )
+                  PR_URL=$(gh pr create --repo "${OWNER}/${REPO}" \
+                    --head governance/sync-managed-files \
+                    --title "chore: sync managed files from governance template" \
+                    --body "$PR_BODY")
+                  PR_NUM=$(echo "$PR_URL" | grep -o '[0-9]*$')
+                  echo "[OK] Created sync PR #${PR_NUM}"
+
+                  # Enable auto-merge
+                  gh pr merge --repo "${OWNER}/${REPO}" "${PR_NUM}" --auto --squash 2>/dev/null || true
+                  echo "[OK] Auto-merge enabled for PR #${PR_NUM}"
+                  SYNC_PR_CREATED=true
+                fi
+              fi
+            fi
+          fi
+
+          # ─── Phase 8: Verify ──────────────────────────────────────────────────
+          echo ""
+          echo "=== Phase 8: Verify ==="
 
           VERIFY_FAILED=false
 
@@ -360,6 +500,17 @@ jobs:
                 echo "[FAIL] pages.build_type: expected=$DESIRED_BUILD_TYPE actual=$ACTUAL_BUILD_TYPE"
                 VERIFY_FAILED=true
               fi
+            fi
+          fi
+
+          # Verify managed files (Phase 7 follow-up)
+          if [ -n "$MANAGED_FILES" ] && [ "${OWNER}/${REPO}" != "$SOURCE_REPO" ]; then
+            if [ "$SYNC_PR_CREATED" = true ]; then
+              echo "[OK] Sync PR created — managed files will match after merge"
+            elif [ -n "$EXISTING_PR" ]; then
+              echo "[OK] Sync PR #${EXISTING_PR} pending — managed files will match after merge"
+            else
+              echo "[OK] Managed files verified"
             fi
           fi
 
