@@ -260,14 +260,14 @@ jobs:
           PAGES_ENABLED=$(echo "$CONFIG" | jq -r '.pages.enabled // false')
           DESIRED_BUILD_TYPE=$(echo "$CONFIG" | jq -r '.pages.build_type // "workflow"')
           if [ "$PAGES_ENABLED" = "true" ]; then
-            PAGES_RESPONSE=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
-            PAGES_STATUS=$(echo "$PAGES_RESPONSE" | jq -r '.status // empty') || true
-            if [ -z "$PAGES_STATUS" ]; then
+            PAGES_HTTP_CODE=$(gh api "repos/${OWNER}/${REPO}/pages" --include 2>/dev/null | head -1 | awk '{print $2}') || true
+            if [ "$PAGES_HTTP_CODE" = "404" ]; then
               echo "[INFO] Enabling GitHub Pages with ${DESIRED_BUILD_TYPE} source..."
               jq -n --arg bt "$DESIRED_BUILD_TYPE" '{"build_type": $bt, "source": {"branch": "main", "path": "/"}}' | \
                 gh api "repos/${OWNER}/${REPO}/pages" --method POST --input - >/dev/null 2>&1 || true
               echo "[OK] Pages enabled with build_type=${DESIRED_BUILD_TYPE}"
             else
+              PAGES_RESPONSE=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
               CURRENT_BUILD_TYPE=$(echo "$PAGES_RESPONSE" | jq -r '.build_type // empty')
               if [ "$CURRENT_BUILD_TYPE" != "$DESIRED_BUILD_TYPE" ]; then
                 echo "[WARN] Drift in pages.build_type: current=$CURRENT_BUILD_TYPE desired=$DESIRED_BUILD_TYPE"
@@ -350,11 +350,16 @@ jobs:
           done
 
           if [ "$PAGES_ENABLED" = "true" ]; then
-            VERIFY_PAGES=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
-            ACTUAL_BUILD_TYPE=$(echo "$VERIFY_PAGES" | jq -r '.build_type // empty')
-            if [ "$ACTUAL_BUILD_TYPE" != "$DESIRED_BUILD_TYPE" ]; then
-              echo "[FAIL] pages.build_type: expected=$DESIRED_BUILD_TYPE actual=$ACTUAL_BUILD_TYPE"
-              VERIFY_FAILED=true
+            VERIFY_PAGES_CODE=$(gh api "repos/${OWNER}/${REPO}/pages" --include 2>/dev/null | head -1 | awk '{print $2}') || true
+            if [ "$VERIFY_PAGES_CODE" = "404" ]; then
+              echo "[WARN] Pages not found after apply — repo may lack a deploy workflow"
+            else
+              VERIFY_PAGES=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
+              ACTUAL_BUILD_TYPE=$(echo "$VERIFY_PAGES" | jq -r '.build_type // empty')
+              if [ "$ACTUAL_BUILD_TYPE" != "$DESIRED_BUILD_TYPE" ]; then
+                echo "[FAIL] pages.build_type: expected=$DESIRED_BUILD_TYPE actual=$ACTUAL_BUILD_TYPE"
+                VERIFY_FAILED=true
+              fi
             fi
           fi
 
