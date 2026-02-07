@@ -1,8 +1,6 @@
-# dependencies
+.DS_Store
 node_modules/
-
-# build output
 dist/
-
-# astro
-.astro/
+.env
+.env.*
+*.log
