@@ -258,15 +258,26 @@ jobs:
           echo "=== Phase 6: Apply Pages ==="
 
           PAGES_ENABLED=$(echo "$CONFIG" | jq -r '.pages.enabled // false')
+          DESIRED_BUILD_TYPE=$(echo "$CONFIG" | jq -r '.pages.build_type // "workflow"')
           if [ "$PAGES_ENABLED" = "true" ]; then
-            PAGES_STATUS=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null | jq -r '.status // empty') || true
+            PAGES_RESPONSE=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
+            PAGES_STATUS=$(echo "$PAGES_RESPONSE" | jq -r '.status // empty') || true
             if [ -z "$PAGES_STATUS" ]; then
-              echo "[INFO] Enabling GitHub Pages with workflow source..."
-              jq -n '{"build_type": "workflow", "source": {"branch": "main", "path": "/"}}' | \
+              echo "[INFO] Enabling GitHub Pages with ${DESIRED_BUILD_TYPE} source..."
+              jq -n --arg bt "$DESIRED_BUILD_TYPE" '{"build_type": $bt, "source": {"branch": "main", "path": "/"}}' | \
                 gh api "repos/${OWNER}/${REPO}/pages" --method POST --input - >/dev/null 2>&1 || true
-              echo "[OK] Pages enabled (or already configured)"
+              echo "[OK] Pages enabled with build_type=${DESIRED_BUILD_TYPE}"
             else
-              echo "[OK] Pages already enabled (status: $PAGES_STATUS)"
+              CURRENT_BUILD_TYPE=$(echo "$PAGES_RESPONSE" | jq -r '.build_type // empty')
+              if [ "$CURRENT_BUILD_TYPE" != "$DESIRED_BUILD_TYPE" ]; then
+                echo "[WARN] Drift in pages.build_type: current=$CURRENT_BUILD_TYPE desired=$DESIRED_BUILD_TYPE"
+                echo "[INFO] Updating Pages build_type to ${DESIRED_BUILD_TYPE}..."
+                jq -n --arg bt "$DESIRED_BUILD_TYPE" '{"build_type": $bt, "source": {"branch": "main", "path": "/"}}' | \
+                  gh api "repos/${OWNER}/${REPO}/pages" --method PUT --input - >/dev/null 2>&1
+                echo "[OK] Pages build_type updated to ${DESIRED_BUILD_TYPE}"
+              else
+                echo "[OK] Pages build_type matches (${CURRENT_BUILD_TYPE}) — no changes needed"
+              fi
             fi
           else
             echo "[SKIP] Pages not enabled in config"
@@ -337,6 +348,15 @@ jobs:
               fi
             done
           done
+
+          if [ "$PAGES_ENABLED" = "true" ]; then
+            VERIFY_PAGES=$(gh api "repos/${OWNER}/${REPO}/pages" 2>/dev/null) || true
+            ACTUAL_BUILD_TYPE=$(echo "$VERIFY_PAGES" | jq -r '.build_type // empty')
+            if [ "$ACTUAL_BUILD_TYPE" != "$DESIRED_BUILD_TYPE" ]; then
+              echo "[FAIL] pages.build_type: expected=$DESIRED_BUILD_TYPE actual=$ACTUAL_BUILD_TYPE"
+              VERIFY_FAILED=true
+            fi
+          fi
 
           if [ "$VERIFY_FAILED" = true ]; then
             echo ""
