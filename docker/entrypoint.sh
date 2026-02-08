@@ -11,6 +11,9 @@ npm update
 # Copy Astro config from theme package
 cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
 
+# Patch: ensure customCss is initialized (workaround for theme plugin bug)
+sed -i "s/title: process.env.DOCS_TITLE || 'Documentation',/title: process.env.DOCS_TITLE || 'Documentation',\n      customCss: [],/" /app/astro.config.mjs
+
 # Inject content
 if [ -d "$CONTENT_DIR" ]; then
   cp -r "$CONTENT_DIR"/* /app/src/content/docs/
