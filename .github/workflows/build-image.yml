@@ -50,7 +50,14 @@ jobs:
             "robinmordasiewicz/f5xc-template"
             "robinmordasiewicz/f5xc-ddos-administration-guide"
           )
+          failed=0
           for repo in "${repos[@]}"; do
             echo "Dispatching github-pages-deploy.yml to ${repo}"
-            gh workflow run github-pages-deploy.yml --repo "${repo}"
+            if ! gh workflow run github-pages-deploy.yml --repo "${repo}"; then
+              echo "::warning::Failed to dispatch to ${repo}"
+              failed=$((failed + 1))
+            fi
           done
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::${failed} dispatch(es) failed"
+          fi
