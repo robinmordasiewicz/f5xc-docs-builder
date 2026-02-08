@@ -35,3 +35,22 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+  dispatch:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch github-pages-deploy workflows
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+        run: |
+          repos=(
+            "robinmordasiewicz/f5xc-docs-theme"
+            "robinmordasiewicz/f5xc-docs-builder"
+            "robinmordasiewicz/f5xc-template"
+            "robinmordasiewicz/f5xc-ddos-administration-guide"
+          )
+          for repo in "${repos[@]}"; do
+            echo "Dispatching github-pages-deploy.yml to ${repo}"
+            gh workflow run github-pages-deploy.yml --repo "${repo}"
+          done
