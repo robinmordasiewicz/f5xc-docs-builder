@@ -4,10 +4,12 @@ set -e
 CONTENT_DIR="${CONTENT_DIR:-/content/docs}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 
-# Clone theme if not mounted/present
-if [ ! -d "/app/theme" ]; then
-  git clone --depth 1 https://github.com/robinmordasiewicz/f5xc-docs-theme.git /app/theme
-fi
+# Update dependencies to latest versions
+npm install
+npm update
+
+# Copy Astro config from theme package
+cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
 
 # Inject content
 if [ -d "$CONTENT_DIR" ]; then
@@ -21,6 +23,12 @@ fi
 if [ -z "$DOCS_TITLE" ] && [ -f /app/src/content/docs/index.mdx ]; then
   DOCS_TITLE=$(grep -m1 '^title:' /app/src/content/docs/index.mdx | sed 's/title: *["]*//;s/["]*$//' || echo "Documentation")
   export DOCS_TITLE
+fi
+
+# Extract base path from repo name (if not set via env)
+if [ -z "$DOCS_BASE" ] && [ -n "$GITHUB_REPOSITORY" ]; then
+  DOCS_BASE="/${GITHUB_REPOSITORY#*/}"
+  export DOCS_BASE
 fi
 
 # Build

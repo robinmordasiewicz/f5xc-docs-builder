@@ -9,6 +9,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "f5xc-docs-theme": "npm:@robinmordasiewicz/f5xc-docs-theme@^1.1.0",
     "@astrojs/react": "^4.4.2",
     "@astrojs/starlight": "^0.37.6",
     "@types/react": "^19.2.13",
