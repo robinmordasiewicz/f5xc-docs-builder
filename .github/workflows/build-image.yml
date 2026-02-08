@@ -2,7 +2,10 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md']
+    paths:
+      - 'docker/**'
+      - 'package.json'
+      - 'package-lock.json'
   schedule:
     - cron: '0 6 * * *'
   repository_dispatch:
