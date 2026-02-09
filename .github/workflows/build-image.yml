@@ -44,14 +44,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
         run: |
-          repos=(
-            "robinmordasiewicz/f5xc-docs-theme"
-            "robinmordasiewicz/f5xc-docs-builder"
-            "robinmordasiewicz/f5xc-template"
-            "robinmordasiewicz/f5xc-ddos-administration-guide"
-          )
+          repos=$(gh api repos/robinmordasiewicz/f5xc-template/contents/.github/config/downstream-repos.json --jq '.content' | base64 -d | jq -r '.[]')
+          if [ -z "$repos" ]; then
+            echo "::error::Failed to fetch downstream repo list"
+            exit 1
+          fi
           failed=0
-          for repo in "${repos[@]}"; do
+          for repo in $repos; do
             echo "Dispatching github-pages-deploy.yml to ${repo}"
             if ! gh workflow run github-pages-deploy.yml --repo "${repo}"; then
               echo "::warning::Failed to dispatch to ${repo}"
