@@ -28,6 +28,12 @@ if [ -z "$DOCS_TITLE" ] && [ -f /app/src/content/docs/index.mdx ]; then
   export DOCS_TITLE
 fi
 
+# Extract description from index.mdx frontmatter (if not set via env)
+if [ -z "$DOCS_DESCRIPTION" ] && [ -f /app/src/content/docs/index.mdx ]; then
+  DOCS_DESCRIPTION=$(grep -m1 '^description:' /app/src/content/docs/index.mdx | sed 's/description: *["]*//;s/["]*$//' || echo "")
+  export DOCS_DESCRIPTION
+fi
+
 # Extract base path from repo name (if not set via env)
 if [ -z "$DOCS_BASE" ] && [ -n "$GITHUB_REPOSITORY" ]; then
   DOCS_BASE="/${GITHUB_REPOSITORY#*/}"
