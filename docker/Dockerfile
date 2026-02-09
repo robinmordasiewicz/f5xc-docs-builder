@@ -1,4 +1,5 @@
 FROM node:24-alpine AS builder
+LABEL org.opencontainers.image.description="f5xc-docs-builder"
 WORKDIR /app
 
 # Install deps (cached layer)
