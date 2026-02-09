@@ -1,0 +1,104 @@
+---
+title: Local Preview for Content Authors
+description: How to preview documentation locally using the published Docker image before pushing changes.
+---
+
+Content repos contain only Markdown/MDX files — no framework code, no Astro config, no `node_modules`. To preview your docs locally, you run the published Docker image against your content directory.
+
+## Prerequisites
+
+- Docker installed and running
+- Your content repo cloned locally with a `docs/` directory containing at least `index.mdx`
+
+## Live Dev Server (recommended)
+
+Override the container entrypoint to run `astro dev` instead of the production build:
+
+```sh
+docker run --rm -it \
+  -v "$(pwd)/docs:/content/docs" \
+  -p 4321:4321 \
+  --entrypoint sh \
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest \
+  -c '
+    npm install && npm update
+    cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
+    sed -i "s/title: process.env.DOCS_TITLE || '\''Documentation'\'',/title: process.env.DOCS_TITLE || '\''Documentation'\'',\n      customCss: [],/" /app/astro.config.mjs
+    cp -r /content/docs/* /app/src/content/docs/
+    DOCS_TITLE=$(grep -m1 "^title:" /app/src/content/docs/index.mdx | sed "s/title: *[\"]*//;s/[\"]*$//") \
+    npx astro dev --host
+  '
+```
+
+Open `http://localhost:4321` in your browser once the server starts.
+
+This command mirrors the steps from `entrypoint.sh` — install dependencies, copy the theme config, patch `customCss`, inject your content — then starts a dev server instead of building.
+
+:::note
+File changes on your host require restarting the container. The volume is copied into the content collection directory at startup, not symlinked, so Astro's file watcher does not see host-side edits. Stop the container with `Ctrl+C` and re-run the command to pick up changes.
+:::
+
+## Static Build (production preview)
+
+For a full production build, use the standard Docker command:
+
+```sh
+docker run --rm \
+  -v "$(pwd)/docs:/content/docs" \
+  -v "$(pwd)/output:/output" \
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest
+```
+
+Then serve the output with any static file server:
+
+```sh
+npx serve output/
+```
+
+This produces the same HTML that CI generates, so it is the most accurate preview.
+
+## Environment Variables
+
+The Docker image supports several environment variables for customizing the build. See the [Environment Variables table in Docker Build](../04-docker/#environment-variables) for the full list.
+
+For local preview, the most useful overrides are:
+
+- **`DOCS_TITLE`** — Override the site title (otherwise extracted from `index.mdx` frontmatter)
+- **`DOCS_BASE`** — Override the base path (otherwise derived from `GITHUB_REPOSITORY`, which is unset locally)
+
+Pass them with `-e`:
+
+```sh
+docker run --rm -it \
+  -e DOCS_TITLE="My Local Preview" \
+  -v "$(pwd)/docs:/content/docs" \
+  -p 4321:4321 \
+  --entrypoint sh \
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest \
+  -c '...'
+```
+
+## Troubleshooting
+
+**Port already in use** — If port 4321 is taken, map to a different host port:
+
+```sh
+-p 8080:4321
+```
+
+Then open `http://localhost:8080`.
+
+**Permission denied on volume mount** — Ensure Docker has access to the directory you are mounting. On macOS, the path must be within a shared directory in Docker Desktop settings. On Linux, check that the user running Docker has read access to `docs/`.
+
+**Content not appearing** — Verify your `docs/` directory contains an `index.mdx` file. The entrypoint expects at least this file to exist. Check the container logs for an `ERROR: No content found` message.
+
+**Dev server crashes on startup** — If you see Astro config errors, the theme package may have updated. Pull the latest image:
+
+```sh
+docker pull ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest
+```
+
+## Further Reading
+
+- [Docker Build](../04-docker/) — Image layers, entrypoint details, and environment variables
+- [Architecture](../01-architecture/) — Content injection model and theme system design
