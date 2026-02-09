@@ -3,14 +3,15 @@ title: CI/CD and Governance
 description: GitHub Actions workflows, template sync, secrets, and branch protection.
 ---
 
-The repository uses four GitHub Actions workflows and a centralized template system for governance.
+The repository uses five GitHub Actions workflows and a centralized template system for governance.
 
 ## Workflows
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| GitHub Pages Deploy | `github-pages-deploy.yml` | Push to `main`, manual dispatch | Builds and deploys the documentation site to GitHub Pages |
-| Build and Publish Docker Image | `build-image.yml` | Push to `main` (non-`.md`), daily cron, `repository_dispatch` | Builds the Docker image and pushes to GHCR |
+| GitHub Pages Deploy | `github-pages-deploy.yml` | Push to `main` (`docs/**`), manual dispatch | Builds and deploys the documentation site to GitHub Pages |
+| Build and Publish Docker Image | `build-image.yml` | Push to `main` (`docker/**`, `package*.json`), daily cron, `repository_dispatch` | Builds the Docker image, pushes to GHCR, and dispatches rebuilds to downstream repos |
+| Auto Merge | `auto-merge.yml` | Pull request events | Automatically enables auto-merge on new PRs |
 | Require Linked Issue | `require-linked-issue.yml` | Pull request events | Blocks PRs that do not reference a GitHub issue |
 | Enforce Repository Settings | `enforce-repo-settings.yml` | Every 6 hours, push to settings config, manual dispatch | Applies standardized repo settings from the template |
 
@@ -20,6 +21,8 @@ The repository uses four GitHub Actions workflows and a centralized template sys
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
   workflow_dispatch:
 ```
 
@@ -28,10 +31,12 @@ Delegates to a reusable workflow in the template repository:
 ```yaml
 jobs:
   docs:
-    uses: robinmordasiewicz/f5xc-template/.github/workflows/docs-build-deploy.yml@main
+    uses: robinmordasiewicz/f5xc-template/.github/workflows/github-pages-deploy.yml@main
 ```
 
-Permissions: `contents: read`, `pages: write`, `id-token: write`. Uses concurrency group `pages` with `cancel-in-progress: true` to avoid stale deployments.
+Permissions: `contents: read`, `packages: read`, `pages: write`, `id-token: write`. Uses concurrency group `pages` with `cancel-in-progress: true` to avoid stale deployments.
+
+Only triggers on push when files under `docs/` change. Can also be triggered manually via `workflow_dispatch`, which is how the dispatch job in `build-image.yml` triggers downstream rebuilds.
 
 ### Build and Publish Docker Image
 
@@ -39,7 +44,10 @@ Permissions: `contents: read`, `pages: write`, `id-token: write`. Uses concurren
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md']
+    paths:
+      - 'docker/**'
+      - 'package.json'
+      - 'package-lock.json'
   schedule:
     - cron: '0 6 * * *'
   repository_dispatch:
@@ -52,9 +60,29 @@ Steps:
 3. Build and push using `docker/build-push-action` with context `.` and file `docker/Dockerfile`
 4. Tags: `ghcr.io/<owner>/<repo>:latest` and `ghcr.io/<owner>/<repo>:<sha>`
 
+After a successful build, the **dispatch** job triggers `github-pages-deploy.yml` via `workflow_dispatch` on every downstream repo listed in the template repository's `downstream-repos.json` config. This ensures all content repos rebuild their docs with the updated builder image.
+
 The daily cron ensures the image stays current even without code changes (picks up dependency updates). The `repository_dispatch` event allows external systems to trigger a rebuild.
 
-Markdown-only changes (`**.md`) are excluded via `paths-ignore` to avoid unnecessary image rebuilds.
+Only triggers on push when `docker/` files or `package*.json` change. Docs-only changes do not trigger an image rebuild.
+
+### Auto Merge
+
+```yaml
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+```
+
+Delegates to a reusable workflow in the template repository:
+
+```yaml
+jobs:
+  auto-merge:
+    uses: robinmordasiewicz/f5xc-template/.github/workflows/auto-merge.yml@main
+```
+
+Permissions: `contents: write`, `pull-requests: write`. Automatically enables auto-merge on new or reopened PRs.
 
 ### Require Linked Issue
 
@@ -127,4 +155,4 @@ The enforce-repo-settings workflow applies branch protection rules from the temp
 | Secret | Source | Purpose |
 |--------|--------|---------|
 | `GITHUB_TOKEN` | Automatic (GitHub) | Used by most workflows for checkout, package publishing, and API calls |
-| `REPO_ADMIN_TOKEN` | Manual (repository secret) | Required by enforce-repo-settings to modify branch protection and repo settings (needs admin scope) |
+| `REPO_ADMIN_TOKEN` | Manual (repository secret) | Required by enforce-repo-settings and the dispatch job to modify branch protection, repo settings, and trigger downstream workflows (needs admin scope) |
