@@ -6,8 +6,8 @@ OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 GENERATE_PDF="${GENERATE_PDF:-false}"
 
 # Update dependencies to latest versions
-npm install
-npm update
+npm install --legacy-peer-deps
+npm update --legacy-peer-deps
 
 # Copy Astro config from theme package
 cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
