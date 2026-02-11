@@ -17,6 +17,37 @@ const resolvedUrl = specUrl.startsWith('/') ? `${base}${specUrl}` : specUrl;
   <ScalarApiViewer specUrl={resolvedUrl} title={title} client:only="react" />
 </div>
 
+<script>
+  function syncScalarTheme() {
+    const theme = document.documentElement.dataset.theme || 'dark';
+    const isDark = theme !== 'light';
+    const container = document.querySelector('.scalar-viewer-container');
+    if (container) {
+      container.classList.toggle('dark-mode', isDark);
+      container.classList.toggle('light-mode', !isDark);
+    }
+  }
+
+  // Strip dark-mode/light-mode from <body> whenever Scalar adds them
+  const bodyObserver = new MutationObserver(() => {
+    const body = document.body;
+    if (body.classList.contains('dark-mode') || body.classList.contains('light-mode')) {
+      body.classList.remove('dark-mode', 'light-mode');
+      syncScalarTheme();
+    }
+  });
+  bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+  // Watch Starlight data-theme changes and sync container class
+  const themeObserver = new MutationObserver(() => {
+    syncScalarTheme();
+  });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // Initial sync
+  syncScalarTheme();
+</script>
+
 <style is:global>
   .scalar-viewer-container {
     margin-block: 1rem;
