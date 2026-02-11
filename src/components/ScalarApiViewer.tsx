@@ -12,7 +12,7 @@ export default function ScalarApiViewer({ specUrl, title }: Props) {
       configuration={{
         spec: { url: specUrl },
         theme: 'kepler',
-        darkMode: true,
+        hideDarkModeToggle: true,
         defaultOpenAllTags: false,
         hideDownloadButton: false,
         metaData: title ? { title } : undefined,
