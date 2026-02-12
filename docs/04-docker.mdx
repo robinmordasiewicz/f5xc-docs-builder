@@ -121,8 +121,13 @@ Copies the built site to the output mount point.
 | `CONTENT_DIR` | `/content/docs` | Path to the mounted content directory |
 | `OUTPUT_DIR` | `/output` | Path where the built site is copied |
 | `DOCS_TITLE` | *(extracted from index.mdx)* | Site title passed to the Astro config |
+| `DOCS_DESCRIPTION` | *(extracted from index.mdx)* | Site description from frontmatter |
 | `DOCS_BASE` | *(derived from `GITHUB_REPOSITORY`)* | Base path for the site (e.g., `/my-docs`) |
+| `DOCS_SITE` | `https://robinmordasiewicz.github.io` | Site URL passed to the Astro config |
 | `GITHUB_REPOSITORY` | *(set by GitHub Actions)* | `owner/repo` string used to derive `DOCS_BASE` |
+| `GENERATE_PDF` | `false` | Enable PDF generation after build |
+| `PDF_FILENAME` | `docs` | Output filename for the generated PDF |
+| `LLMS_OPTIONAL_LINKS` | `[]` | JSON array of child site URLs for the `llms.txt` Optional section |
 
 ## Local Usage
 

@@ -5,6 +5,18 @@ description: How to preview documentation locally using the published Docker ima
 
 Content repos contain only Markdown/MDX files — no framework code, no Astro config, no `node_modules`. To preview your docs locally, you run the published Docker image against your content directory.
 
+## How It Works
+
+Three repos collaborate to produce the final site:
+
+| Repo | Artifact | Role |
+|------|----------|------|
+| **f5xc-docs-theme** | npm package | Astro/Starlight config, CSS, logos, plugins |
+| **f5xc-docs-builder** | Docker image | Pulls the theme at runtime, compiles MDX to static HTML |
+| **f5xc-template** | Reusable GitHub workflow | Orchestrates the container in CI, deploys to GitHub Pages |
+
+Content repos only depend on the Docker image — everything else is handled automatically.
+
 ## Prerequisites
 
 - Docker installed and running
@@ -21,8 +33,9 @@ docker run --rm -it \
   --entrypoint sh \
   ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest \
   -c '
-    npm install && npm update
+    npm install --legacy-peer-deps && npm update --legacy-peer-deps
     cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
+    cp /app/node_modules/f5xc-docs-theme/src/content.config.ts /app/src/content.config.ts
     sed -i "s/title: process.env.DOCS_TITLE || '\''Documentation'\'',/title: process.env.DOCS_TITLE || '\''Documentation'\'',\n      customCss: [],/" /app/astro.config.mjs
     cp -r /content/docs/* /app/src/content/docs/
     DOCS_TITLE=$(grep -m1 "^title:" /app/src/content/docs/index.mdx | sed "s/title: *[\"]*//;s/[\"]*$//") \
@@ -32,7 +45,7 @@ docker run --rm -it \
 
 Open `http://localhost:4321` in your browser once the server starts.
 
-This command mirrors the steps from `entrypoint.sh` — install dependencies, copy the theme config, patch `customCss`, inject your content — then starts a dev server instead of building.
+This command mirrors the steps from `entrypoint.sh` — install dependencies, copy the theme config and content schema, patch `customCss`, inject your content — then starts a dev server instead of building.
 
 :::note
 File changes on your host require restarting the container. The volume is copied into the content collection directory at startup, not symlinked, so Astro's file watcher does not see host-side edits. Stop the container with `Ctrl+C` and re-run the command to pick up changes.
@@ -40,37 +53,74 @@ File changes on your host require restarting the container. The volume is copied
 
 ## Static Build (production preview)
 
-For a full production build, use the standard Docker command:
+For a full production build that matches CI output, pass `GITHUB_REPOSITORY` so the base path is derived correctly:
 
 ```sh
 docker run --rm \
-  -v "$(pwd)/docs:/content/docs" \
+  -v "$(pwd)/docs:/content/docs:ro" \
   -v "$(pwd)/output:/output" \
+  -e GITHUB_REPOSITORY="robinmordasiewicz/my-docs" \
   ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest
 ```
 
-Then serve the output with any static file server:
+Replace `robinmordasiewicz/my-docs` with your actual `owner/repo`. This sets `DOCS_BASE` to `/my-docs`, matching how GitHub Pages serves project sites under a subpath.
+
+Then serve the output with the correct base path:
 
 ```sh
-npx serve output/
+npx serve output/ -l 8080
 ```
 
-This produces the same HTML that CI generates, so it is the most accurate preview.
+Open `http://localhost:8080/my-docs/` (substituting your repo name).
+
+:::tip
+If you omit `GITHUB_REPOSITORY`, the site builds with no base path. Links and assets will work at the root (`http://localhost:8080/`) but won't match the CI output exactly.
+:::
+
+## Static Assets
+
+The CI workflow automatically detects subdirectories in `docs/` that contain no `.md` or `.mdx` files (e.g., `docs/images/`, `docs/diagrams/`) and mounts them as static assets at `/app/public/<dirname>`. This makes them available at the site root without going through the content collection.
+
+To replicate this locally, add an extra volume mount for each static asset directory:
+
+```sh
+docker run --rm \
+  -v "$(pwd)/docs:/content/docs:ro" \
+  -v "$(pwd)/docs/images:/app/public/images:ro" \
+  -v "$(pwd)/output:/output" \
+  -e GITHUB_REPOSITORY="robinmordasiewicz/my-docs" \
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest
+```
+
+Reference these assets in your MDX with a root-relative path:
+
+```mdx
+![Architecture diagram](/images/architecture.png)
+```
 
 ## Environment Variables
 
-The Docker image supports several environment variables for customizing the build. See the [Environment Variables table in Docker Build](../04-docker/#environment-variables) for the full list.
+The Docker image supports several environment variables for customizing the build. See the [Environment Variables table in Docker Build](../04-docker/#environment-variables) for the core list.
 
 For local preview, the most useful overrides are:
 
-- **`DOCS_TITLE`** — Override the site title (otherwise extracted from `index.mdx` frontmatter)
-- **`DOCS_BASE`** — Override the base path (otherwise derived from `GITHUB_REPOSITORY`, which is unset locally)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCS_TITLE` | *(extracted from index.mdx)* | Override the site title |
+| `DOCS_BASE` | *(derived from `GITHUB_REPOSITORY`)* | Override the base path |
+| `GITHUB_REPOSITORY` | *(unset locally)* | `owner/repo` — used to derive `DOCS_BASE` |
+| `DOCS_DESCRIPTION` | *(extracted from index.mdx)* | Site description from frontmatter |
+| `DOCS_SITE` | `https://robinmordasiewicz.github.io` | Site URL passed to Astro |
+| `GENERATE_PDF` | `false` | Enable PDF generation after build |
+| `PDF_FILENAME` | `docs` | Output filename for the generated PDF |
+| `LLMS_OPTIONAL_LINKS` | `[]` | JSON array of child site URLs for the `llms.txt` Optional section |
 
 Pass them with `-e`:
 
 ```sh
 docker run --rm -it \
   -e DOCS_TITLE="My Local Preview" \
+  -e GITHUB_REPOSITORY="robinmordasiewicz/my-docs" \
   -v "$(pwd)/docs:/content/docs" \
   -p 4321:4321 \
   --entrypoint sh \
@@ -91,6 +141,8 @@ Then open `http://localhost:8080`.
 **Permission denied on volume mount** — Ensure Docker has access to the directory you are mounting. On macOS, the path must be within a shared directory in Docker Desktop settings. On Linux, check that the user running Docker has read access to `docs/`.
 
 **Content not appearing** — Verify your `docs/` directory contains an `index.mdx` file. The entrypoint expects at least this file to exist. Check the container logs for an `ERROR: No content found` message.
+
+**Base path mismatch** — If links or assets return 404 in the static build, make sure you passed `-e GITHUB_REPOSITORY="owner/repo"` and are serving the output at the matching subpath (e.g., `http://localhost:8080/repo/`).
 
 **Dev server crashes on startup** — If you see Astro config errors, the theme package may have updated. Pull the latest image:
 
