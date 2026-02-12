@@ -13,9 +13,6 @@ npm update --legacy-peer-deps
 cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
 cp /app/node_modules/f5xc-docs-theme/src/content.config.ts /app/src/content.config.ts
 
-# Patch: ensure customCss is initialized (workaround for theme plugin bug)
-sed -i "s/title: process.env.DOCS_TITLE || 'Documentation',/title: process.env.DOCS_TITLE || 'Documentation',\n      customCss: [],/" /app/astro.config.mjs
-
 # Inject content
 if [ -d "$CONTENT_DIR" ]; then
   cp -r "$CONTENT_DIR"/* /app/src/content/docs/

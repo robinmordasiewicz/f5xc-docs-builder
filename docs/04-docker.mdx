@@ -57,9 +57,10 @@ Ensures the theme package and all dependencies are at their latest compatible ve
 
 ```sh
 cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
+cp /app/node_modules/f5xc-docs-theme/src/content.config.ts /app/src/content.config.ts
 ```
 
-Pulls `astro.config.mjs` from the theme package into the project root. This is the only Astro config the build uses — see [Architecture](../01-architecture/) for the theme system design.
+Copies `astro.config.mjs` and `content.config.ts` from the theme package. The theme is the single source of truth for Astro configuration — see [Architecture](../01-architecture/) for the theme system design.
 
 ### Step 3: Inject Content
 
@@ -151,6 +152,7 @@ When working on the builder itself (components, plugins, theme integration), you
 ```sh
 npm ci
 cp node_modules/f5xc-docs-theme/astro.config.mjs astro.config.mjs
+cp node_modules/f5xc-docs-theme/src/content.config.ts src/content.config.ts
 # Copy some test content into the content collection
 cp -r /path/to/test-content/* src/content/docs/
 DOCS_TITLE="Dev Test" npx astro dev --host
@@ -159,7 +161,7 @@ DOCS_TITLE="Dev Test" npx astro dev --host
 Open `http://localhost:4321`. Hot module replacement (HMR) works for component and plugin changes.
 
 :::note
-`astro.config.mjs` comes from the theme package and is not version-controlled in this repo. You must copy it from `node_modules` before running the dev server. The file is overwritten on each build by `entrypoint.sh`.
+`astro.config.mjs` and `content.config.ts` come from the theme package and are not version-controlled in this repo. You must copy them from `node_modules` before running the dev server. The entrypoint handles this automatically in Docker builds.
 :::
 
 :::note

@@ -36,7 +36,6 @@ docker run --rm -it \
     npm install --legacy-peer-deps && npm update --legacy-peer-deps
     cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
     cp /app/node_modules/f5xc-docs-theme/src/content.config.ts /app/src/content.config.ts
-    sed -i "s/title: process.env.DOCS_TITLE || '\''Documentation'\'',/title: process.env.DOCS_TITLE || '\''Documentation'\'',\n      customCss: [],/" /app/astro.config.mjs
     cp -r /content/docs/* /app/src/content/docs/
     DOCS_TITLE=$(grep -m1 "^title:" /app/src/content/docs/index.mdx | sed "s/title: *[\"]*//;s/[\"]*$//") \
     npx astro dev --host
@@ -45,7 +44,7 @@ docker run --rm -it \
 
 Open `http://localhost:4321` in your browser once the server starts.
 
-This command mirrors the steps from `entrypoint.sh` — install dependencies, copy the theme config and content schema, patch `customCss`, inject your content — then starts a dev server instead of building.
+This command mirrors the steps from `entrypoint.sh` — update dependencies, copy the theme config (single source of truth), inject your content, extract the title — then starts a dev server instead of building.
 
 :::note
 File changes on your host require restarting the container. The volume is copied into the content collection directory at startup, not symlinked, so Astro's file watcher does not see host-side edits. Stop the container with `Ctrl+C` and re-run the command to pick up changes.
