@@ -50,6 +50,27 @@ This command mirrors the steps from `entrypoint.sh` — update dependencies, cop
 File changes on your host require restarting the container. The volume is copied into the content collection directory at startup, not symlinked, so Astro's file watcher does not see host-side edits. Stop the container with `Ctrl+C` and re-run the command to pick up changes.
 :::
 
+If your `docs/` directory contains static asset subdirectories (e.g., `docs/images/`, `docs/diagrams/` — folders with no `.md`/`.mdx` files), add a volume mount for each so they are served as public assets:
+
+```sh
+docker run --rm -it \
+  -v "$(pwd)/docs:/content/docs" \
+  -v "$(pwd)/docs/images:/app/public/images:ro" \
+  -p 4321:4321 \
+  --entrypoint sh \
+  ghcr.io/robinmordasiewicz/f5xc-docs-builder:latest \
+  -c '
+    npm install --legacy-peer-deps && npm update --legacy-peer-deps
+    cp /app/node_modules/f5xc-docs-theme/astro.config.mjs /app/astro.config.mjs
+    cp /app/node_modules/f5xc-docs-theme/src/content.config.ts /app/src/content.config.ts
+    cp -r /content/docs/* /app/src/content/docs/
+    DOCS_TITLE=$(grep -m1 "^title:" /app/src/content/docs/index.mdx | sed "s/title: *[\"]*//;s/[\"]*$//") \
+    npx astro dev --host
+  '
+```
+
+This mirrors the [Static Assets](#static-assets) section below — the same volume mounts apply to both the dev server and the production build.
+
 ## Static Build (production preview)
 
 For a full production build that matches CI output, pass `GITHUB_REPOSITORY` so the base path is derived correctly:
