@@ -61,8 +61,6 @@ src/
     placeholders.json            # Placeholder token definitions
   lib/
     placeholder-store.ts         # State management: load, save, compute, emit
-  plugins/
-    remark-mermaid.mjs           # Remark plugin: code blocks → mermaid containers
   scripts/
     placeholder-dom.ts           # Client-side DOM walker and Mermaid renderer
 ```
@@ -104,7 +102,7 @@ flowchart LR
 | Concern | When | How |
 |---------|------|-----|
 | MDX → HTML | Build time | Astro compiler |
-| Mermaid code blocks → container divs | Build time | `remark-mermaid.mjs` plugin |
+| Mermaid code blocks → container divs | Build time | `remark-mermaid.mjs` plugin (from `f5xc-docs-theme`) |
 | Placeholder tokens → interactive spans | Client time | `placeholder-dom.ts` TreeWalker |
 | Mermaid SVG rendering | Client time | `mermaid` CDN import in `placeholder-dom.ts` |
 | Placeholder form state | Client time | `placeholder-store.ts` + localStorage |

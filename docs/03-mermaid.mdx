@@ -9,7 +9,7 @@ The builder supports [Mermaid](https://mermaid.js.org/) diagrams with two-phase 
 
 ## Remark Plugin
 
-`src/plugins/remark-mermaid.mjs` runs during the Astro build. It uses `unist-util-visit` to find fenced code blocks with `lang === 'mermaid'` and replaces them with HTML:
+The remark-mermaid plugin (provided by the `f5xc-docs-theme` npm package) runs during the Astro build. It uses `unist-util-visit` to find fenced code blocks with `lang === 'mermaid'` and replaces them with HTML:
 
 ```js
 visit(tree, 'code', (node, index, parent) => {
